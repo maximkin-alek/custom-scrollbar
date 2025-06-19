@@ -1,0 +1,55 @@
+:root {
+  --scrollbar-width: 8px;
+  --scrollbar-color: rgba(90, 105, 128, 0.12);
+  --scrollbar-thumb-color: rgba(157, 168, 185, 1);
+  --scrollbar-thumb-color-hover: rgba(180, 188, 202, 1);
+}
+
+/* Скрываем нативные скроллбары во всех браузерах */
+.hide-native-scrollbar {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.hide-native-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Edge */
+}
+
+body {
+  margin: 0;
+  padding: 16px 24px;
+  background-color: #fbf6e9;
+}
+
+body.scrollbar-dragging {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.os-theme-borsch {
+  --os-size: 10px;
+}
+
+.os-theme-borsch .os-scrollbar-track {
+  background-color: var(--scrollbar-color);
+  border-radius: 16px;
+}
+
+.os-theme-borsch .os-scrollbar-handle {
+  background-color: var(--scrollbar-thumb-color);
+  border-radius: 16px;
+  opacity: 0.7;
+}
+
+.os-theme-borsch .os-scrollbar-handle:hover {
+  background-color: var(--scrollbar-thumb-color-hover);
+}
+
+.os-theme-borsch.os-scrollbar-horizontal {
+  --os-size: 10px;
+}
+
+.os-theme-borsch.os-scrollbar-vertical {
+  --os-size: 10px;
+  right: 5px;
+}

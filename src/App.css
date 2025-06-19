@@ -1,0 +1,14 @@
+.block {
+  height: 30vh;
+  margin-bottom: 50px;
+  padding: 16px;
+  border: 1px solid rgb(99, 162, 5);
+  border-radius: 16px;
+}
+
+.custom-container {
+  height: 30vh;
+  padding: 16px;
+  border: 1px solid rgb(99, 162, 5);
+  border-radius: 16px;
+}

@@ -1,0 +1,53 @@
+.appleScrollContainer {
+  position: relative;
+  overflow: hidden;
+}
+
+.appleScrollContent {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.appleScrollbarTrack {
+  position: absolute;
+  top: 0;
+  right: 5px;
+  bottom: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+  background-color: var(--scrollbar-color);
+  z-index: 100;
+}
+
+.appleScrollbarThumb {
+  position: absolute;
+  right: 2px;
+  cursor: pointer;
+  pointer-events: all;
+  background-color: var(--scrollbar-thumb-color);
+  transition: background-color 200ms ease, transform 100ms ease;
+}
+
+.appleScrollbarThumb:hover {
+  background-color: var(--scrollbar-thumb-color-hover);
+}
+
+/* Оптимизация для Firefox */
+@supports (scrollbar-width: none) {
+  .appleScrollContent {
+    scrollbar-width: none;
+  }
+}
+
+/* Скрываем нативные скроллбары во всех браузерах */
+.appleScrollContent {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.appleScrollContent::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Edge */
+}
