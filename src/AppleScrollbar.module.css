@@ -1,6 +1,7 @@
 .appleScrollContainer {
   position: relative;
   overflow: hidden;
+  touch-action: none;
 }
 
 .appleScrollContent {

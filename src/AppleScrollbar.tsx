@@ -25,12 +25,10 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   const thumbRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const startYRef = useRef<number>(0);
+  const lastYRef = useRef<number>(0);
   const startThumbPositionRef = useRef<number>(0);
-  const startScrollTopRef = useRef<number>(0);
-  const touchOffsetYRef = useRef<number>(0);
   const isTouchDeviceRef = useRef<boolean>(false);
-  const lastPositionRef = useRef<number>(0);
+  const trackHeightRef = useRef<number>(0);
 
   // Рассчет размеров скроллбара
   const calculateThumb = useCallback(() => {
@@ -41,16 +39,17 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
     const scrollRatio = container.clientHeight / content.scrollHeight;
     const newThumbHeight = Math.max(scrollRatio * container.clientHeight, 40);
-    
+
     setThumbHeight(newThumbHeight);
 
     const maxScroll = content.scrollHeight - container.clientHeight;
-    const newThumbPosition = maxScroll > 0
-      ? (content.scrollTop / maxScroll) * (container.clientHeight - newThumbHeight)
-      : 0;
+    const newThumbPosition =
+      maxScroll > 0
+        ? (content.scrollTop / maxScroll) * (container.clientHeight - newThumbHeight)
+        : 0;
 
     setThumbPosition(newThumbPosition);
-    lastPositionRef.current = newThumbPosition;
+    trackHeightRef.current = container.clientHeight - newThumbHeight;
   }, []);
 
   // Показать скроллбар и запустить таймер скрытия
@@ -67,7 +66,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   // Обновление позиции при скролле
   const handleScroll = useCallback(() => {
     if (isDragging) return;
-    
+
     if (!containerRef.current || !contentRef.current) return;
 
     const container = containerRef.current;
@@ -76,56 +75,53 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     const maxScroll = content.scrollHeight - container.clientHeight;
     if (maxScroll <= 0) return;
 
-    const newThumbPosition = 
+    const newThumbPosition =
       (content.scrollTop / maxScroll) * (container.clientHeight - thumbHeight);
-    
+
     setThumbPosition(newThumbPosition);
-    lastPositionRef.current = newThumbPosition;
     showScrollbar();
   }, [showScrollbar, thumbHeight, isDragging]);
-
-  // Начало перетаскивания ползунка
-  const startDrag = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const thumbRect = thumbRef.current?.getBoundingClientRect();
-    if (!thumbRect) return;
-    
-    startYRef.current = e.clientY;
-    startThumbPositionRef.current = thumbPosition;
-    touchOffsetYRef.current = e.clientY - thumbRect.top;
-    isTouchDeviceRef.current = false;
-    
-    startDragCommon();
-  }, [thumbPosition]);
-
-  // Начало перетаскивания для touch
-  const startTouchDrag = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (e.touches.length === 0) return;
-    
-    const thumbRect = thumbRef.current?.getBoundingClientRect();
-    if (!thumbRect) return;
-    
-    const touch = e.touches[0];
-    startYRef.current = touch.clientY;
-    startThumbPositionRef.current = thumbPosition;
-    touchOffsetYRef.current = touch.clientY - thumbRect.top;
-    isTouchDeviceRef.current = true;
-    
-    startDragCommon();
-  }, [thumbPosition]);
 
   // Общая логика начала перетаскивания
   const startDragCommon = useCallback(() => {
     setIsDragging(true);
     setIsVisible(true);
-    
+
     if (hideTimeoutRef.current) {
       clearTimeout(hideTimeoutRef.current);
     }
-    
-    startScrollTopRef.current = contentRef.current?.scrollTop || 0;
+
     document.body.style.userSelect = 'none';
   }, []);
+
+  // Начало перетаскивания ползунка (мышь)
+  const startDrag = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      lastYRef.current = e.clientY;
+      startThumbPositionRef.current = thumbPosition;
+      isTouchDeviceRef.current = false;
+
+      startDragCommon();
+    },
+    [startDragCommon, thumbPosition],
+  );
+
+  // Начало перетаскивания для touch
+  const startTouchDrag = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (e.touches.length === 0) return;
+
+      const touch = e.touches[0];
+      lastYRef.current = touch.clientY;
+      startThumbPositionRef.current = thumbPosition;
+      isTouchDeviceRef.current = true;
+
+      // Важно: не вызываем preventDefault() здесь, чтобы не блокировать скролл
+      startDragCommon();
+    },
+    [startDragCommon, thumbPosition],
+  );
 
   // Инициализация ResizeObserver
   useEffect(() => {
@@ -169,7 +165,14 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     };
 
     const handleTouchMove = (e: TouchEvent) => {
+      console.log(e.touches, 'handleTouchMove');
       if (e.touches.length === 0) return;
+
+      // Для touchmove вызываем preventDefault только если это возможно
+      if (e.cancelable) {
+        e.preventDefault();
+      }
+
       handleDragCommon(e.touches[0].clientY);
     };
 
@@ -178,14 +181,19 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
       const container = containerRef.current;
       const content = contentRef.current;
-      const containerRect = container.getBoundingClientRect();
       const maxScroll = content.scrollHeight - container.clientHeight;
       const trackHeight = container.clientHeight - thumbHeight;
 
-      // Рассчитываем новую позицию ползунка с учетом смещения
-      const thumbTop = clientY - containerRect.top - touchOffsetYRef.current;
-      let newThumbPosition = Math.max(0, Math.min(trackHeight, thumbTop));
-      
+      // Рассчитываем относительное смещение
+      const deltaY = clientY - lastYRef.current;
+      lastYRef.current = clientY;
+
+      // Вычисляем новую позицию на основе смещения
+      let newThumbPosition = thumbPosition + deltaY;
+
+      // Ограничиваем позицию в пределах трека
+      newThumbPosition = Math.max(0, Math.min(trackHeight, newThumbPosition));
+
       // Рассчитываем соответствующий scrollTop
       if (trackHeight > 0 && maxScroll > 0) {
         const scrollPercentage = newThumbPosition / trackHeight;
@@ -194,13 +202,12 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
       // Обновляем позицию ползунка
       setThumbPosition(newThumbPosition);
-      lastPositionRef.current = newThumbPosition;
     };
 
     const stopDrag = () => {
       setIsDragging(false);
       document.body.style.userSelect = '';
-      
+
       if (isThumbHovered && !isTouchDeviceRef.current) {
         if (hideTimeoutRef.current) {
           clearTimeout(hideTimeoutRef.current);
@@ -214,7 +221,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', stopDrag);
     document.addEventListener('mouseleave', stopDrag);
-    
+
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', stopDrag);
     document.addEventListener('touchcancel', stopDrag);
@@ -224,13 +231,13 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', stopDrag);
       document.removeEventListener('mouseleave', stopDrag);
-      
+
       // Удаляем обработчики тач-устройств
       document.removeEventListener('touchmove', handleTouchMove);
       document.removeEventListener('touchend', stopDrag);
       document.removeEventListener('touchcancel', stopDrag);
     };
-  }, [isDragging, thumbHeight, isThumbHovered, showScrollbar]);
+  }, [isDragging, thumbHeight, isThumbHovered, showScrollbar, thumbPosition]);
 
   // Обработчики для ползунка
   const handleThumbEnter = useCallback(() => {
@@ -247,16 +254,20 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     }
   }, [isVisible, isDragging, showScrollbar]);
 
-  // Сохраняем позицию для анимации
   useEffect(() => {
-    lastPositionRef.current = thumbPosition;
-  }, [thumbPosition]);
+    const handleTouchStart = (e: TouchEvent) => {
+      console.log(e.touches, 'handleTouchStart');
+    };
+
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+    };
+  }, []);
 
   return (
-    <div
-      ref={containerRef}
-      className={`${styles.appleScrollContainer} ${className}`}
-    >
+    <div ref={containerRef} className={`${styles.appleScrollContainer} ${className}`}>
       <div ref={contentRef} className={styles.appleScrollContent}>
         {children}
       </div>
