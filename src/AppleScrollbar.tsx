@@ -15,8 +15,8 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   fadeTimeout = 1000,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
-  const [isThumbHovered, setIsThumbHovered] = useState(false);
+  const [isScrollbarVisible, setIsScrollbarVisible] = useState(false);
+  const [isHoveredOverScrollbar, setIsHoveredOverScrollbar] = useState(false);
   const [thumbHeight, setThumbHeight] = useState(0);
   const [thumbPosition, setThumbPosition] = useState(0);
 
@@ -26,6 +26,22 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const startYRef = useRef(0);
   const startThumbTopRef = useRef(0);
+
+  // Храним актуальные состояния для использования в таймерах
+  const stateRef = useRef({
+    isHoveredOverScrollbar,
+    isDragging,
+    isScrollbarVisible,
+  });
+
+  // Синхронизируем ref с текущими состояниями
+  useEffect(() => {
+    stateRef.current = {
+      isHoveredOverScrollbar,
+      isDragging,
+      isScrollbarVisible,
+    };
+  }, [isHoveredOverScrollbar, isDragging, isScrollbarVisible]);
 
   const calculateThumb = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
@@ -53,18 +69,17 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   const scheduleHide = useCallback(() => {
     clearHideTimeout();
     hideTimeoutRef.current = setTimeout(() => {
-      setIsVisible(prev => {
-        if (!isThumbHovered && !isDragging) {
-          return false;
-        }
-        return prev;
-      });
+      // Используем актуальные значения из ref
+      const { isHoveredOverScrollbar, isDragging } = stateRef.current;
+      if (!isHoveredOverScrollbar && !isDragging) {
+        setIsScrollbarVisible(false);
+      }
     }, fadeTimeout);
-  }, [fadeTimeout, isThumbHovered, isDragging]);
+  }, [fadeTimeout]);
 
   const showScrollbar = useCallback(() => {
+    setIsScrollbarVisible(true);
     clearHideTimeout();
-    setIsVisible(true);
     scheduleHide();
   }, [scheduleHide]);
 
@@ -109,12 +124,8 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   const stopDragging = useCallback(() => {
     setIsDragging(false);
     document.body.style.userSelect = '';
-    if (!isThumbHovered) {
-      setIsVisible(false);
-    } else {
-      scheduleHide();
-    }
-  }, [isThumbHovered, scheduleHide]);
+    scheduleHide();
+  }, [scheduleHide]);
 
   useEffect(() => {
     calculateThumb();
@@ -141,17 +152,25 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     };
   }, [isDragging, handlePointerMove, stopDragging]);
 
+  // Обработка ухода мыши за пределы окна
   useEffect(() => {
     const handleDocLeave = (e: MouseEvent) => {
-      if (!isDragging && !isThumbHovered) {
-        setIsVisible(false);
+      if (
+        e.clientY <= 0 || 
+        e.clientX <= 0 || 
+        e.clientX >= window.innerWidth || 
+        e.clientY >= window.innerHeight
+      ) {
+        clearHideTimeout();
+        setIsScrollbarVisible(false);
       }
     };
+    
     document.addEventListener('mouseleave', handleDocLeave);
     return () => {
       document.removeEventListener('mouseleave', handleDocLeave);
     };
-  }, [isDragging, isThumbHovered]);
+  }, []);
 
   return (
     <div ref={containerRef} className={`${styles.appleScrollContainer} ${className}`}>
@@ -162,12 +181,17 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
         className={styles.appleScrollbarTrack}
         style={{
           width: scrollbarWidth + 4,
-          opacity: isVisible ? 1 : 0,
+          opacity: isScrollbarVisible ? 1 : 0,
           transition: 'opacity 0.2s ease',
-          pointerEvents: isVisible ? 'auto' : 'none',
+          pointerEvents: isScrollbarVisible ? 'auto' : 'none',
+        }}
+        onMouseEnter={() => {
+          setIsHoveredOverScrollbar(true);
+          clearHideTimeout();
         }}
         onMouseLeave={() => {
-          if (!isDragging && !isThumbHovered) setIsVisible(false);
+          setIsHoveredOverScrollbar(false);
+          scheduleHide();
         }}
       >
         <div
@@ -180,18 +204,8 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
             transform: `translateY(${thumbPosition}px)`,
             transition: isDragging ? 'none' : 'transform 0.1s ease',
             touchAction: 'none',
-            pointerEvents: isVisible ? 'auto' : 'none',
           }}
           onPointerDown={handlePointerDown}
-          onMouseEnter={() => {
-            setIsThumbHovered(true);
-            clearHideTimeout();
-          }}
-          onMouseLeave={() => {
-            setIsThumbHovered(false);
-            if (!isDragging) setIsVisible(false);
-            else scheduleHide();
-          }}
         />
       </div>
     </div>
