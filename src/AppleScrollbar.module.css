@@ -22,6 +22,7 @@
   transition: opacity 200ms ease;
   background-color: var(--scrollbar-color);
   z-index: 100;
+  border-radius: 4px;
 }
 
 /* Горизонтальный трек */
@@ -34,6 +35,7 @@
   transition: opacity 200ms ease;
   background-color: var(--scrollbar-color);
   z-index: 100;
+  border-radius: 4px;
 }
 
 /* Общие стили для ползунков */
@@ -52,12 +54,12 @@
 
 /* Специфичные стили для вертикального ползунка */
 .appleScrollbarThumbVertical {
-  right: 2px;
+  right: 0;
 }
 
 /* Специфичные стили для горизонтального ползунка */
 .appleScrollbarThumbHorizontal {
-  bottom: 2px;
+  bottom: 0;
 }
 
 /* Оптимизация для Firefox */
