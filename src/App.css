@@ -1,5 +1,7 @@
 .block {
   height: 30vh;
+  width: 500px;
+  margin: 0 auto;
   margin-bottom: 50px;
   padding: 16px;
   border: 1px solid rgb(99, 162, 5);
@@ -8,6 +10,8 @@
 
 .custom-container {
   height: 30vh;
+  width: 500px;
+  margin: 0 auto;
   padding: 16px;
   border: 1px solid rgb(99, 162, 5);
   border-radius: 16px;
