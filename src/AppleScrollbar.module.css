@@ -76,18 +76,3 @@
 .appleScrollContent::-webkit-scrollbar {
   display: none; /* Chrome/Safari/Edge */
 }
-.appleScrollbarTrackHorizontal {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  transition: opacity 0.2s ease;
-}
-
-.appleScrollbarTrackVertical {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  transition: opacity 0.2s ease;
-}
