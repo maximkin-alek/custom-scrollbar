@@ -359,7 +359,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       <div
         className={styles.appleScrollbarTrackVertical}
         style={{
-          width: scrollbarWidth + 4,
+          width: scrollbarWidth,
           opacity: isScrollbarVisible ? 1 : 0,
           pointerEvents: isScrollbarVisible ? 'auto' : 'none',
           bottom: scrollbarWidth + 10,
@@ -391,7 +391,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       <div
         className={styles.appleScrollbarTrackHorizontal}
         style={{
-          height: scrollbarWidth + 4,
+          height: scrollbarWidth,
           opacity: isScrollbarVisible ? 1 : 0,
           pointerEvents: isScrollbarVisible ? 'auto' : 'none',
           right: scrollbarWidth + 10,
