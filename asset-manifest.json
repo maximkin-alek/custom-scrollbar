@@ -1,13 +1,13 @@
 {
   "files": {
-    "main.css": "/custom-scrollbar/static/css/main.ad69c793.css",
-    "main.js": "/custom-scrollbar/static/js/main.acd8cefc.js",
+    "main.css": "/custom-scrollbar/static/css/main.435ee71c.css",
+    "main.js": "/custom-scrollbar/static/js/main.211420bd.js",
     "index.html": "/custom-scrollbar/index.html",
-    "main.ad69c793.css.map": "/custom-scrollbar/static/css/main.ad69c793.css.map",
-    "main.acd8cefc.js.map": "/custom-scrollbar/static/js/main.acd8cefc.js.map"
+    "main.435ee71c.css.map": "/custom-scrollbar/static/css/main.435ee71c.css.map",
+    "main.211420bd.js.map": "/custom-scrollbar/static/js/main.211420bd.js.map"
   },
   "entrypoints": [
-    "static/css/main.ad69c793.css",
-    "static/js/main.acd8cefc.js"
+    "static/css/main.435ee71c.css",
+    "static/js/main.211420bd.js"
   ]
 }
