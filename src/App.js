@@ -8,6 +8,7 @@ function App() {
     <div className="app">
       <h1>Custom scrollbar</h1>
 
+      <h2>Overlayscrollbars-react</h2>
       {/* Реализация библиотеки overlayscrollbars-react */}
       <OverlayScrollbarsComponent
         defer
@@ -22,6 +23,7 @@ function App() {
       </OverlayScrollbarsComponent>
 
       {/* Кастомный вариант */}
+      <h2>Custom</h2>
       <AppleScrollbar className="custom-container" scrollbarWidth={6} fadeTimeout={1000}>
         <div className="long-content">{TEXT}</div>
         <img
