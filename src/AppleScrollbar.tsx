@@ -61,11 +61,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     isScrollbarVisible,
   });
 
-  // Рефы для отслеживания инерционного скролла и таймеров
-  const isInertialScrollingRef = useRef(false);
-  const lastScrollPositionRef = useRef({ top: 0, left: 0 });
-  const inertialTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   useEffect(() => {
     stateRef.current = {
       verticalHovered: vertical.isHovered,
@@ -189,24 +184,8 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     manageTimeout(true, 'schedule');
   }, [manageTimeout]);
 
-  // Сохраняем актуальные функции в ref
-  useEffect(() => {
-    updateThumbPositionsRef.current = updateThumbPositions;
-    showScrollbarRef.current = showScrollbar;
-  }, [updateThumbPositions, showScrollbar]);
-
-  const updateThumbPositionsRef = useRef(updateThumbPositions);
-  const showScrollbarRef = useRef(showScrollbar);
-
-  // Модифицируем handleScroll
+  // Обработчик скролла с оптимизацией для iOS
   const handleScroll = useCallback(() => {
-    if (
-      stateRef.current.verticalDragging ||
-      stateRef.current.horizontalDragging ||
-      isInertialScrollingRef.current
-    )
-      return;
-
     updateThumbPositions();
     showScrollbar();
   }, [updateThumbPositions, showScrollbar]);
@@ -293,15 +272,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
   const stopDragging = useCallback(
     (orientation: 'vertical' | 'horizontal') => {
-      // Принудительно обновляем stateRef
-      stateRef.current = {
-        ...stateRef.current,
-        verticalDragging:
-          orientation === 'vertical' ? false : stateRef.current.verticalDragging,
-        horizontalDragging:
-          orientation === 'horizontal' ? false : stateRef.current.horizontalDragging,
-      };
-
       if (orientation === 'vertical') {
         setVertical((prev) => ({ ...prev, isDragging: false }));
       } else {
@@ -310,21 +280,14 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
       document.body.style.userSelect = '';
       manageTimeout(orientation === 'horizontal', 'schedule');
-
-      // Принудительное обновление после перетаскивания
-      calculateThumb();
-      updateThumbPositions();
     },
-    [manageTimeout, calculateThumb, updateThumbPositions],
+    [manageTimeout],
   );
 
   // Эффекты
   useEffect(() => {
     calculateThumb();
     const ro = new ResizeObserver(() => {
-      // Блокировать обновление при перетаскивании
-      if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging)
-        return;
       calculateThumb();
       updateThumbPositions();
     });
@@ -334,68 +297,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
     return () => ro.disconnect();
   }, [calculateThumb, updateThumbPositions]);
-
-  // Улучшенная обработка инерционного скролла для iOS
-  useEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
-
-    const handleTouchStart = () => {
-      // Сбрасываем состояние инерции
-      isInertialScrollingRef.current = false;
-      if (inertialTimeoutRef.current) {
-        clearTimeout(inertialTimeoutRef.current);
-        inertialTimeoutRef.current = null;
-      }
-    };
-
-    const handleTouchEnd = () => {
-      isInertialScrollingRef.current = true;
-      lastScrollPositionRef.current = {
-        top: content.scrollTop,
-        left: content.scrollLeft,
-      };
-
-      // Функция проверки остановки скролла
-      const checkScrollStop = () => {
-        if (!content) return;
-
-        const currentTop = content.scrollTop;
-        const currentLeft = content.scrollLeft;
-        const lastTop = lastScrollPositionRef.current.top;
-        const lastLeft = lastScrollPositionRef.current.left;
-
-        // Если позиция не изменилась (скролл остановился)
-        if (
-          Math.abs(currentTop - lastTop) < 0.5 &&
-          Math.abs(currentLeft - lastLeft) < 0.5
-        ) {
-          isInertialScrollingRef.current = false;
-          // Обновляем позиции после остановки инерции
-          updateThumbPositionsRef.current();
-          showScrollbarRef.current();
-          inertialTimeoutRef.current = null;
-        } else {
-          // Обновляем последнюю позицию и продолжаем проверку
-          lastScrollPositionRef.current = { top: currentTop, left: currentLeft };
-          inertialTimeoutRef.current = setTimeout(checkScrollStop, 50);
-        }
-      };
-
-      inertialTimeoutRef.current = setTimeout(checkScrollStop, 50);
-    };
-
-    content.addEventListener('touchstart', handleTouchStart, { passive: true });
-    content.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-    return () => {
-      content.removeEventListener('touchstart', handleTouchStart);
-      content.removeEventListener('touchend', handleTouchEnd);
-      if (inertialTimeoutRef.current) {
-        clearTimeout(inertialTimeoutRef.current);
-      }
-    };
-  }, []);
 
   useEffect(() => {
     const content = contentRef.current;

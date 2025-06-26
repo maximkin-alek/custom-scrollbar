@@ -1,7 +1,7 @@
 {
   "name": "custom-scroll",
   "version": "0.1.0",
-	"homepage": "https://maximkin-alek.github.io/custom-scrollbar",
+  "homepage": "https://maximkin-alek.github.io/custom-scrollbar",
   "private": false,
   "dependencies": {
     "@testing-library/jest-dom": "5.16.5",
@@ -17,7 +17,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-		"deploy": "gh-pages -d build"
+    "deploy": "gh-pages -d build"
   },
   "eslintConfig": {
     "extends": [
