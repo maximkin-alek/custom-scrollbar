@@ -3,6 +3,7 @@
   overflow: hidden;
   touch-action: none;
   -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
 }
 
 .appleScrollContent {
@@ -12,6 +13,7 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   overflow-anchor: none;
+  will-change: transform;
 }
 
 /* Вертикальный трек */

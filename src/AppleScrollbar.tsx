@@ -52,6 +52,11 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   const verticalThumbRef = useRef<HTMLDivElement>(null);
   const horizontalThumbRef = useRef<HTMLDivElement>(null);
 
+  // Рефы для управления анимацией и блокировками
+  const animationFrameRef = useRef<number | null>(null);
+  const isUpdatingFromDragRef = useRef(false);
+  const lastDragUpdateRef = useRef({ vertical: 0, horizontal: 0 });
+
   // Общее состояние для синхронизации
   const stateRef = useRef({
     verticalHovered: vertical.isHovered,
@@ -106,6 +111,9 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     if (!containerRef.current || !contentRef.current) return;
     const container = containerRef.current;
     const content = contentRef.current;
+
+    // Если обновление инициировано перетаскиванием - пропускаем
+    if (isUpdatingFromDragRef.current) return;
 
     // Вертикальные расчеты
     const verticalTrackHeight = container.clientHeight - (scrollbarWidth + 10);
@@ -184,11 +192,40 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     manageTimeout(true, 'schedule');
   }, [manageTimeout]);
 
-  // Обработчик скролла с оптимизацией для iOS
+  // Оптимизированный обработчик скролла
   const handleScroll = useCallback(() => {
-    updateThumbPositions();
-    showScrollbar();
+    if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging) {
+      return;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(() => {
+      updateThumbPositions();
+      showScrollbar();
+    });
   }, [updateThumbPositions, showScrollbar]);
+
+  // Прямое обновление позиции ползунка без setState
+  const updateThumbPositionDirectly = (
+    orientation: 'vertical' | 'horizontal',
+    position: number,
+  ) => {
+    const thumbRef =
+      orientation === 'vertical' ? verticalThumbRef.current : horizontalThumbRef.current;
+
+    if (!thumbRef) return;
+
+    if (orientation === 'vertical') {
+      thumbRef.style.transform = `translateY(${position}px)`;
+      lastDragUpdateRef.current.vertical = position;
+    } else {
+      thumbRef.style.transform = `translateX(${position}px)`;
+      lastDragUpdateRef.current.horizontal = position;
+    }
+  };
 
   // Обработчик перетаскивания
   const handlePointerMove = useCallback(
@@ -205,7 +242,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
       const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
 
-      // Всегда используем АКТУАЛЬНЫЕ размеры в реальном времени
       const trackSize = container[clientProp] - (scrollbarWidth + 10);
       const contentSize = content[sizeProp];
       const containerSize = content[clientProp];
@@ -221,19 +257,23 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       const scrollPercentage = newThumbPos / availableSpace;
       let newScrollPos = scrollPercentage * maxScroll;
 
-      // Гарантируем достижение конца скролла
       if (newThumbPos >= availableSpace - 1) {
         newScrollPos = maxScroll;
       }
 
+      // Устанавливаем флаг, что обновление идет от перетаскивания
+      isUpdatingFromDragRef.current = true;
+
+      // Прямое обновление позиции контента
       content[scrollProp] = newScrollPos;
 
-      // Обновляем позицию ползунка
-      if (isVertical) {
-        setVertical((prev) => ({ ...prev, thumbPosition: newThumbPos }));
-      } else {
-        setHorizontal((prev) => ({ ...prev, thumbPosition: newThumbPos }));
-      }
+      // Прямое обновление позиции ползунка без setState
+      updateThumbPositionDirectly(orientation, newThumbPos);
+
+      // Сбрасываем флаг после микротаска
+      setTimeout(() => {
+        isUpdatingFromDragRef.current = false;
+      }, 0);
     },
     [vertical, horizontal, scrollbarWidth],
   );
@@ -272,10 +312,19 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
   const stopDragging = useCallback(
     (orientation: 'vertical' | 'horizontal') => {
+      // Синхронизируем состояние после перетаскивания
       if (orientation === 'vertical') {
-        setVertical((prev) => ({ ...prev, isDragging: false }));
+        setVertical((prev) => ({
+          ...prev,
+          isDragging: false,
+          thumbPosition: lastDragUpdateRef.current.vertical,
+        }));
       } else {
-        setHorizontal((prev) => ({ ...prev, isDragging: false }));
+        setHorizontal((prev) => ({
+          ...prev,
+          isDragging: false,
+          thumbPosition: lastDragUpdateRef.current.horizontal,
+        }));
       }
 
       document.body.style.userSelect = '';
@@ -303,9 +352,15 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     if (!content) return;
 
     content.addEventListener('scroll', handleScroll);
-    return () => content.removeEventListener('scroll', handleScroll);
+    return () => {
+      content.removeEventListener('scroll', handleScroll);
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
   }, [handleScroll]);
 
+  // Обработчик перемещения указателя
   useEffect(() => {
     const handleMove = (e: PointerEvent) => {
       if (vertical.isDragging) handlePointerMove(e, 'vertical');
