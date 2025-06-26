@@ -184,8 +184,9 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     manageTimeout(true, 'schedule');
   }, [manageTimeout]);
 
-  // Обработчик скролла
   const handleScroll = useCallback(() => {
+    // Блокировать обновление позиции при перетаскивании
+    if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging) return;
     updateThumbPositions();
     showScrollbar();
   }, [updateThumbPositions, showScrollbar]);
@@ -272,6 +273,15 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
   const stopDragging = useCallback(
     (orientation: 'vertical' | 'horizontal') => {
+      // Принудительно обновляем stateRef
+      stateRef.current = {
+        ...stateRef.current,
+        verticalDragging:
+          orientation === 'vertical' ? false : stateRef.current.verticalDragging,
+        horizontalDragging:
+          orientation === 'horizontal' ? false : stateRef.current.horizontalDragging,
+      };
+
       if (orientation === 'vertical') {
         setVertical((prev) => ({ ...prev, isDragging: false }));
       } else {
@@ -280,14 +290,21 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
       document.body.style.userSelect = '';
       manageTimeout(orientation === 'horizontal', 'schedule');
+
+      // Принудительное обновление после перетаскивания
+      calculateThumb();
+      updateThumbPositions();
     },
-    [manageTimeout],
+    [manageTimeout, calculateThumb, updateThumbPositions],
   );
 
   // Эффекты
   useEffect(() => {
     calculateThumb();
     const ro = new ResizeObserver(() => {
+      // Блокировать обновление при перетаскивании
+      if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging)
+        return;
       calculateThumb();
       updateThumbPositions();
     });
