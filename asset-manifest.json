@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "/static/css/main.ad69c793.css",
-    "main.js": "/static/js/main.acd8cefc.js",
-    "index.html": "/index.html",
-    "main.ad69c793.css.map": "/static/css/main.ad69c793.css.map",
-    "main.acd8cefc.js.map": "/static/js/main.acd8cefc.js.map"
+    "main.css": "/custom-scrollbar/static/css/main.ad69c793.css",
+    "main.js": "/custom-scrollbar/static/js/main.acd8cefc.js",
+    "index.html": "/custom-scrollbar/index.html",
+    "main.ad69c793.css.map": "/custom-scrollbar/static/css/main.ad69c793.css.map",
+    "main.acd8cefc.js.map": "/custom-scrollbar/static/js/main.acd8cefc.js.map"
   },
   "entrypoints": [
     "static/css/main.ad69c793.css",
