@@ -17,4 +17,10 @@
   padding: 16px;
   border: 1px solid rgb(99, 162, 5);
   border-radius: 16px;
+  margin-bottom: 50px;
+}
+
+.title {
+  width: max-content;
+  margin: 0 auto 12px;
 }
