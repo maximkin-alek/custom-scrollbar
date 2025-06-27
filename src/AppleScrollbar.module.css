@@ -24,7 +24,6 @@
   bottom: 0;
   pointer-events: none;
   transition: opacity 200ms ease;
-  background-color: var(--scrollbar-color);
   z-index: 100;
   border-radius: 4px;
 }
@@ -37,7 +36,6 @@
   bottom: 5px;
   pointer-events: none;
   transition: opacity 200ms ease;
-  background-color: var(--scrollbar-color);
   z-index: 100;
   border-radius: 4px;
 }

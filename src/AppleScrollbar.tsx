@@ -4,8 +4,9 @@ import styles from './AppleScrollbar.module.css';
 interface AppleScrollbarProps {
   children: React.ReactNode;
   className?: string;
-  scrollbarWidth?: number;
+  size?: 's' | 'm';
   fadeTimeout?: number;
+  isTrack?: boolean;
 }
 
 interface ScrollbarState {
@@ -18,12 +19,19 @@ interface ScrollbarState {
   hideTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>;
 }
 
+const WIDTHS = {
+  s: 4,
+  m: 8,
+};
+
 const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   children,
   className = '',
-  scrollbarWidth = 8,
+  size = 's',
   fadeTimeout = 1000,
+  isTrack = true,
 }) => {
+  const scrollbarWidth = WIDTHS[size];
   // Состояния для скроллбаров
   const [vertical, setVertical] = useState<ScrollbarState>({
     isDragging: false,
@@ -427,6 +435,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
             opacity: isScrollbarVisible ? 1 : 0,
             pointerEvents: isScrollbarVisible ? 'auto' : 'none',
             bottom: scrollbarWidth + 10,
+            backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
           }}
           onMouseEnter={() => {
             setVertical((prev) => ({ ...prev, isHovered: true }));
@@ -461,6 +470,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
             opacity: isScrollbarVisible ? 1 : 0,
             pointerEvents: isScrollbarVisible ? 'auto' : 'none',
             right: scrollbarWidth + 10,
+            backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
           }}
           onMouseEnter={() => {
             setHorizontal((prev) => ({ ...prev, isHovered: true }));
