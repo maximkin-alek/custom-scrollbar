@@ -4,7 +4,7 @@ import styles from './AppleScrollbar.module.css';
 interface AppleScrollbarProps {
   children: React.ReactNode;
   className?: string;
-  scrollbarWidth?: number;
+  size?: 's' | 'm';
   fadeTimeout?: number;
 }
 
@@ -18,12 +18,18 @@ interface ScrollbarState {
   hideTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>;
 }
 
+const WIDTHS = {
+  s: 4,
+  m: 8,
+};
+
 const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   children,
   className = '',
-  scrollbarWidth = 8,
+  size = 's',
   fadeTimeout = 1000,
 }) => {
+  const scrollbarWidth = WIDTHS[size];
   // Состояния для скроллбаров
   const [vertical, setVertical] = useState<ScrollbarState>({
     isDragging: false,
