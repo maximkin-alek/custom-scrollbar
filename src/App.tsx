@@ -52,7 +52,12 @@ function App() {
       </AppleScrollbar>
 
       <h3 className="title">Вертикальный скролл</h3>
-      <AppleScrollbar className="custom-container" size="m" fadeTimeout={1000}>
+      <AppleScrollbar
+        isTrack={false}
+        className="custom-container"
+        size="m"
+        fadeTimeout={1000}
+      >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="">
           {new Array(15).fill('_').map((_, i) => (
             <div
