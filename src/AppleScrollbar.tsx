@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import styles from './AppleScrollbar.module.css';
+import {
+  calculateThumbMetrics,
+  calculateScrollFromDrag,
+} from './utils/scrollbarUtils.ts';
 
 interface AppleScrollbarProps {
   children: React.ReactNode;
@@ -90,72 +94,109 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     isScrollbarVisible,
   ]);
 
-  // Функция для расчета размеров ползунков
-  const calculateThumb = useCallback(() => {
+  const calculateThumbSizes = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
     const container = containerRef.current;
     const content = contentRef.current;
 
     // Вертикальный расчет
-    const verticalTrackHeight = container.clientHeight - (scrollbarWidth + 10);
-    const verticalScrollRatio = container.clientHeight / content.scrollHeight;
-
-    // Проверяем, нужен ли вертикальный скролл
-    const needsVerticalScroll = content.scrollHeight > container.clientHeight;
-    const verticalThumbSize = needsVerticalScroll
-      ? Math.max(verticalScrollRatio * verticalTrackHeight, 40)
-      : 0;
+    const verticalThumbSize = calculateThumbMetrics(
+      container.clientHeight,
+      scrollbarWidth,
+      content.scrollHeight,
+      container.clientHeight,
+      content.scrollTop,
+    ).thumbSize;
 
     // Горизонтальный расчет
-    const horizontalTrackWidth = container.clientWidth - (scrollbarWidth + 10);
-    const horizontalScrollRatio = container.clientWidth / content.scrollWidth;
-
-    // Проверяем, нужен ли горизонтальный скролл
-    const needsHorizontalScroll = content.scrollWidth > container.clientWidth;
-    const horizontalThumbSize = needsHorizontalScroll
-      ? Math.max(horizontalScrollRatio * horizontalTrackWidth, 40)
-      : 0;
+    const horizontalThumbSize = calculateThumbMetrics(
+      container.clientWidth,
+      scrollbarWidth,
+      content.scrollWidth,
+      container.clientWidth,
+      content.scrollLeft,
+    ).thumbSize;
 
     // Обновление состояний
     setVertical((prev) => ({ ...prev, thumbSize: verticalThumbSize }));
     setHorizontal((prev) => ({ ...prev, thumbSize: horizontalThumbSize }));
   }, [scrollbarWidth]);
 
-  // Функция для обновления позиций ползунков
+  // Обновленная функция позиций
   const updateThumbPositions = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
     const container = containerRef.current;
     const content = contentRef.current;
 
-    // Если обновление инициировано перетаскиванием - пропускаем
     if (isUpdatingFromDragRef.current) return;
 
     // Вертикальные расчеты
-    const verticalTrackHeight = container.clientHeight - (scrollbarWidth + 10);
-    const verticalMaxScroll = Math.max(0, content.scrollHeight - container.clientHeight);
-
-    let verticalThumbPos = 0;
-    if (verticalMaxScroll > 0 && vertical.thumbSize > 0) {
-      const thumbMaxPosition = verticalTrackHeight - vertical.thumbSize;
-      verticalThumbPos = (content.scrollTop / verticalMaxScroll) * thumbMaxPosition;
-      verticalThumbPos = Math.max(0, Math.min(thumbMaxPosition, verticalThumbPos));
-    }
+    const verticalResult = calculateThumbMetrics(
+      container.clientHeight,
+      scrollbarWidth,
+      content.scrollHeight,
+      container.clientHeight,
+      content.scrollTop,
+    );
 
     // Горизонтальные расчеты
-    const horizontalTrackWidth = container.clientWidth - (scrollbarWidth + 10);
-    const horizontalMaxScroll = Math.max(0, content.scrollWidth - container.clientWidth);
-
-    let horizontalThumbPos = 0;
-    if (horizontalMaxScroll > 0 && horizontal.thumbSize > 0) {
-      const thumbMaxPosition = horizontalTrackWidth - horizontal.thumbSize;
-      horizontalThumbPos = (content.scrollLeft / horizontalMaxScroll) * thumbMaxPosition;
-      horizontalThumbPos = Math.max(0, Math.min(thumbMaxPosition, horizontalThumbPos));
-    }
+    const horizontalResult = calculateThumbMetrics(
+      container.clientWidth,
+      scrollbarWidth,
+      content.scrollWidth,
+      container.clientWidth,
+      content.scrollLeft,
+    );
 
     // Обновление позиций
-    setVertical((prev) => ({ ...prev, thumbPosition: verticalThumbPos }));
-    setHorizontal((prev) => ({ ...prev, thumbPosition: horizontalThumbPos }));
-  }, [vertical.thumbSize, horizontal.thumbSize, scrollbarWidth]);
+    setVertical((prev) => ({ ...prev, thumbPosition: verticalResult.thumbPosition }));
+    setHorizontal((prev) => ({ ...prev, thumbPosition: horizontalResult.thumbPosition }));
+  }, [scrollbarWidth]);
+
+  // Обновленный обработчик перетаскивания
+  const handlePointerMove = useCallback(
+    (e: PointerEvent, orientation: 'vertical' | 'horizontal') => {
+      const isVertical = orientation === 'vertical';
+      const scrollbar = isVertical ? vertical : horizontal;
+
+      if (!scrollbar.isDragging || !containerRef.current || !contentRef.current) return;
+
+      const container = containerRef.current;
+      const content = contentRef.current;
+      const positionProp = isVertical ? 'clientY' : 'clientX';
+      const scrollProp = isVertical ? 'scrollTop' : 'scrollLeft';
+      const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
+      const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
+
+      const trackSize = container[clientProp] - (scrollbarWidth + 10);
+      const maxScroll = Math.max(0, content[sizeProp] - content[clientProp]);
+
+      const delta = e[positionProp] - scrollbar.startPosition;
+      const newScrollPos = calculateScrollFromDrag(
+        delta,
+        scrollbar.startThumbPosition,
+        trackSize,
+        scrollbar.thumbSize,
+        maxScroll,
+      );
+
+      // Устанавливаем флаг, что обновление идет от перетаскивания
+      isUpdatingFromDragRef.current = true;
+      content[scrollProp] = newScrollPos;
+
+      // Прямое обновление позиции ползунка
+      const availableSpace = trackSize - scrollbar.thumbSize;
+      const thumbPosition =
+        maxScroll > 0 ? (newScrollPos / maxScroll) * availableSpace : 0;
+
+      updateThumbPositionDirectly(orientation, thumbPosition);
+
+      setTimeout(() => {
+        isUpdatingFromDragRef.current = false;
+      }, 0);
+    },
+    [vertical, horizontal, scrollbarWidth],
+  );
 
   // Управление таймаутами
   const manageTimeout = useCallback(
@@ -242,57 +283,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     }
   };
 
-  // Обработчик перетаскивания
-  const handlePointerMove = useCallback(
-    (e: PointerEvent, orientation: 'vertical' | 'horizontal') => {
-      const isVertical = orientation === 'vertical';
-      const scrollbar = isVertical ? vertical : horizontal;
-
-      if (!scrollbar.isDragging || !containerRef.current || !contentRef.current) return;
-
-      const container = containerRef.current;
-      const content = contentRef.current;
-      const positionProp = isVertical ? 'clientY' : 'clientX';
-      const scrollProp = isVertical ? 'scrollTop' : 'scrollLeft';
-      const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
-      const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
-
-      const trackSize = container[clientProp] - (scrollbarWidth + 10);
-      const contentSize = content[sizeProp];
-      const containerSize = content[clientProp];
-      const maxScroll = Math.max(0, contentSize - containerSize + 1);
-      const availableSpace = trackSize - scrollbar.thumbSize;
-
-      if (availableSpace <= 0 || maxScroll <= 0) return;
-
-      const delta = e[positionProp] - scrollbar.startPosition;
-      let newThumbPos = scrollbar.startThumbPosition + delta;
-      newThumbPos = Math.max(0, Math.min(availableSpace, newThumbPos));
-
-      const scrollPercentage = newThumbPos / availableSpace;
-      let newScrollPos = scrollPercentage * maxScroll;
-
-      if (newThumbPos >= availableSpace - 1) {
-        newScrollPos = maxScroll;
-      }
-
-      // Устанавливаем флаг, что обновление идет от перетаскивания
-      isUpdatingFromDragRef.current = true;
-
-      // Прямое обновление позиции контента
-      content[scrollProp] = newScrollPos;
-
-      // Прямое обновление позиции ползунка без setState
-      updateThumbPositionDirectly(orientation, newThumbPos);
-
-      // Сбрасываем флаг после микротаска
-      setTimeout(() => {
-        isUpdatingFromDragRef.current = false;
-      }, 0);
-    },
-    [vertical, horizontal, scrollbarWidth],
-  );
-
   // Обработчики событий
   const handlePointerDown = (
     e: React.PointerEvent<HTMLDivElement>,
@@ -350,9 +340,9 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
   // Эффекты
   useEffect(() => {
-    calculateThumb();
+    calculateThumbSizes();
     const ro = new ResizeObserver(() => {
-      calculateThumb();
+      calculateThumbSizes();
       updateThumbPositions();
     });
 
@@ -360,7 +350,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     if (contentRef.current) ro.observe(contentRef.current);
 
     return () => ro.disconnect();
-  }, [calculateThumb, updateThumbPositions]);
+  }, [calculateThumbSizes, updateThumbPositions]);
 
   useEffect(() => {
     const content = contentRef.current;

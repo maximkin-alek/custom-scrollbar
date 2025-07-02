@@ -37,6 +37,7 @@ function App() {
         <div style={{ display: 'flex', minWidth: 'max-content' }} className="">
           {new Array(15).fill('_').map((_, i) => (
             <div
+              key={`h-${i}`}
               style={{
                 minWidth: 100,
                 margin: '0 10px',
@@ -61,6 +62,7 @@ function App() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }} className="">
           {new Array(15).fill('_').map((_, i) => (
             <div
+              key={i}
               style={{
                 minWidth: 100,
                 margin: '0 10px',
