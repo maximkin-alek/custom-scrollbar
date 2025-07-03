@@ -1,16 +1,19 @@
-import React, { useState, useRef, useEffect, useCallback, useReducer } from 'react';
+import React, { useRef, useEffect, useCallback, useReducer } from 'react';
 import styles from './AppleScrollbar.module.css';
 import {
   calculateThumbMetrics,
   calculateScrollFromDrag,
 } from './utils/scrollbarUtils.ts';
-import { scrollbarsReducer } from './scrollbarReducer.ts';
 import { AppleScrollbarProps, ScrollbarsState } from './types.ts';
+import { scrollbarsReducer } from './scrollbarReducer.ts';
+import { useScrollbarVisibility } from './hooks/useScrollbarVisibility.ts';
 
 const WIDTHS = {
   s: 4,
   m: 8,
 };
+
+const TRACK_PADDING = 10;
 
 const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   children,
@@ -44,8 +47,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
   const [scrollbars, dispatch] = useReducer(scrollbarsReducer, initialState);
 
-  const [isScrollbarVisible, setIsScrollbarVisible] = useState(false);
-
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const verticalThumbRef = useRef<HTMLDivElement>(null);
@@ -62,7 +63,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     horizontalHovered: scrollbars.horizontal.isHovered,
     verticalDragging: scrollbars.vertical.isDragging,
     horizontalDragging: scrollbars.horizontal.isDragging,
-    isScrollbarVisible,
   });
 
   useEffect(() => {
@@ -71,15 +71,15 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       horizontalHovered: scrollbars.horizontal.isHovered,
       verticalDragging: scrollbars.vertical.isDragging,
       horizontalDragging: scrollbars.horizontal.isDragging,
-      isScrollbarVisible,
     };
   }, [
     scrollbars.vertical.isHovered,
     scrollbars.horizontal.isHovered,
     scrollbars.vertical.isDragging,
     scrollbars.horizontal.isDragging,
-    isScrollbarVisible,
   ]);
+
+  const visibility = useScrollbarVisibility(fadeTimeout, () => stateRef.current);
 
   const calculateThumbSizes = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
@@ -171,7 +171,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
       const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
 
-      const trackSize = container[clientProp] - (scrollbarWidth + 10);
+      const trackSize = container[clientProp] - (scrollbarWidth + TRACK_PADDING);
       const maxScroll = Math.max(0, content[sizeProp] - content[clientProp]);
 
       const delta = e[positionProp] - scrollbar.startPosition;
@@ -201,56 +201,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     [scrollbars.vertical, scrollbars.horizontal, scrollbarWidth],
   );
 
-  // Управление таймаутами
-  const manageTimeout = useCallback(
-    (isHorizontal: boolean, action: 'clear' | 'schedule') => {
-      const scrollbar = isHorizontal ? scrollbars.horizontal : scrollbars.vertical;
-      const timeoutRef = scrollbar.hideTimeoutRef;
-
-      if (action === 'clear') {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        return;
-      }
-
-      if (action === 'schedule') {
-        timeoutRef.current = setTimeout(() => {
-          const {
-            verticalHovered,
-            horizontalHovered,
-            verticalDragging,
-            horizontalDragging,
-          } = stateRef.current;
-
-          if (isHorizontal) {
-            if (!horizontalHovered && !horizontalDragging) {
-              setIsScrollbarVisible((prev) =>
-                verticalHovered || verticalDragging ? prev : false,
-              );
-            }
-          } else {
-            if (!verticalHovered && !verticalDragging) {
-              setIsScrollbarVisible((prev) =>
-                horizontalHovered || horizontalDragging ? prev : false,
-              );
-            }
-          }
-        }, fadeTimeout);
-      }
-    },
-    [fadeTimeout, scrollbars.horizontal, scrollbars.vertical],
-  );
-
-  const showScrollbar = useCallback(() => {
-    setIsScrollbarVisible(true);
-    manageTimeout(false, 'clear');
-    manageTimeout(true, 'clear');
-    manageTimeout(false, 'schedule');
-    manageTimeout(true, 'schedule');
-  }, [manageTimeout]);
-
   // Оптимизированный обработчик скролла
   const handleScroll = useCallback(() => {
     if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging) {
@@ -263,9 +213,9 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
     animationFrameRef.current = requestAnimationFrame(() => {
       updateThumbPositions();
-      showScrollbar();
+      visibility.showScrollbar();
     });
-  }, [updateThumbPositions, showScrollbar]);
+  }, [updateThumbPositions, visibility]);
 
   // Прямое обновление позиции ползунка без setState
   const updateThumbPositionDirectly = (
@@ -300,31 +250,20 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
         ? scrollbars.vertical.thumbPosition
         : scrollbars.horizontal.thumbPosition;
 
-    if (orientation === 'vertical') {
-      dispatch({
-        type: 'SET_DRAGGING',
-        value: true,
-        orientation: 'vertical',
-        startPosition: position,
-        startThumbPosition: thumbPosition,
-      });
-    } else {
-      dispatch({
-        type: 'SET_DRAGGING',
-        value: true,
-        orientation: 'horizontal',
-        startPosition: position,
-        startThumbPosition: thumbPosition,
-      });
-    }
+    dispatch({
+      type: 'SET_DRAGGING',
+      value: true,
+      orientation,
+      startPosition: position,
+      startThumbPosition: thumbPosition,
+    });
 
-    showScrollbar();
+    visibility.showScrollbar();
     document.body.style.userSelect = 'none';
   };
 
   const stopDragging = useCallback(
     (orientation: 'vertical' | 'horizontal') => {
-      // Исправленная версия без ошибки
       dispatch({
         type: 'SET_DRAGGING',
         value: false,
@@ -338,9 +277,9 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       });
 
       document.body.style.userSelect = '';
-      manageTimeout(orientation === 'horizontal', 'schedule');
+      visibility.scheduleHide();
     },
-    [manageTimeout],
+    [visibility],
   );
 
   // Эффекты
@@ -408,42 +347,39 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
         e.clientX >= window.innerWidth ||
         e.clientY >= window.innerHeight
       ) {
-        manageTimeout(false, 'clear');
-        manageTimeout(true, 'clear');
-        setIsScrollbarVisible(false);
+        visibility.clearHideTimeout();
+        visibility.scheduleHide();
       }
     };
 
     document.addEventListener('mouseleave', handleDocLeave);
     return () => document.removeEventListener('mouseleave', handleDocLeave);
-  }, [manageTimeout]);
+  }, [visibility]);
 
-  // Рендер компонента
-  // Рендер компонента
   return (
     <div ref={containerRef} className={`${styles.appleScrollContainer} ${className}`}>
       <div ref={contentRef} className={styles.appleScrollContent}>
         {children}
       </div>
 
-      {/* Вертикальный Scrollbar - показываем только если нужен */}
+      {/* Вертикальный Scrollbar */}
       {scrollbars.vertical.thumbSize > 0 && (
         <div
           className={styles.appleScrollbarTrackVertical}
           style={{
             width: scrollbarWidth,
-            opacity: isScrollbarVisible ? 1 : 0,
-            pointerEvents: isScrollbarVisible ? 'auto' : 'none',
-            bottom: scrollbarWidth + 10,
+            opacity: visibility.isScrollbarVisible ? 1 : 0,
+            pointerEvents: visibility.isScrollbarVisible ? 'auto' : 'none',
+            bottom: scrollbarWidth + TRACK_PADDING,
             backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
           }}
           onMouseEnter={() => {
             dispatch({ type: 'SET_HOVERED', value: true, orientation: 'vertical' });
-            manageTimeout(false, 'clear');
+            visibility.forceShow();
           }}
           onMouseLeave={() => {
             dispatch({ type: 'SET_HOVERED', value: false, orientation: 'vertical' });
-            manageTimeout(false, 'schedule');
+            visibility.scheduleHide();
           }}
         >
           <div
@@ -461,24 +397,24 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
         </div>
       )}
 
-      {/* Горизонтальный Scrollbar - показываем только если нужен */}
+      {/* Горизонтальный Scrollbar */}
       {scrollbars.horizontal.thumbSize > 0 && (
         <div
           className={styles.appleScrollbarTrackHorizontal}
           style={{
             height: scrollbarWidth,
-            opacity: isScrollbarVisible ? 1 : 0,
-            pointerEvents: isScrollbarVisible ? 'auto' : 'none',
-            right: scrollbarWidth + 10,
+            opacity: visibility.isScrollbarVisible ? 1 : 0,
+            pointerEvents: visibility.isScrollbarVisible ? 'auto' : 'none',
+            right: scrollbarWidth + TRACK_PADDING,
             backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
           }}
           onMouseEnter={() => {
             dispatch({ type: 'SET_HOVERED', value: true, orientation: 'horizontal' });
-            manageTimeout(true, 'clear');
+            visibility.forceShow();
           }}
           onMouseLeave={() => {
             dispatch({ type: 'SET_HOVERED', value: false, orientation: 'horizontal' });
-            manageTimeout(true, 'schedule');
+            visibility.scheduleHide();
           }}
         >
           <div
