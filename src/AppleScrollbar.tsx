@@ -1,28 +1,20 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useReducer } from 'react';
 import styles from './AppleScrollbar.module.css';
-
-interface AppleScrollbarProps {
-  children: React.ReactNode;
-  className?: string;
-  size?: 's' | 'm';
-  fadeTimeout?: number;
-  isTrack?: boolean;
-}
-
-interface ScrollbarState {
-  isDragging: boolean;
-  isHovered: boolean;
-  thumbSize: number;
-  thumbPosition: number;
-  startPosition: number;
-  startThumbPosition: number;
-  hideTimeoutRef: React.MutableRefObject<NodeJS.Timeout | null>;
-}
+import {
+  calculateThumbMetrics,
+  calculateScrollFromDrag,
+} from './utils/scrollbarUtils.ts';
+import { AppleScrollbarProps, ScrollbarsState } from './types';
+import { scrollbarsReducer } from './scrollbarReducer.ts';
+import { useScrollbarVisibility } from './hooks/useScrollbarVisibility.ts';
+import ScrollbarTrack from './components/ScrollbarTrack.tsx';
 
 const WIDTHS = {
   s: 4,
   m: 8,
 };
+
+const TRACK_PADDING = 10;
 
 const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   children,
@@ -32,182 +24,172 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   isTrack = true,
 }) => {
   const scrollbarWidth = WIDTHS[size];
-  // Состояния для скроллбаров
-  const [vertical, setVertical] = useState<ScrollbarState>({
-    isDragging: false,
-    isHovered: false,
-    thumbSize: 0,
-    thumbPosition: 0,
-    startPosition: 0,
-    startThumbPosition: 0,
-    hideTimeoutRef: useRef<NodeJS.Timeout | null>(null),
-  });
 
-  const [horizontal, setHorizontal] = useState<ScrollbarState>({
-    isDragging: false,
-    isHovered: false,
-    thumbSize: 0,
-    thumbPosition: 0,
-    startPosition: 0,
-    startThumbPosition: 0,
-    hideTimeoutRef: useRef<NodeJS.Timeout | null>(null),
-  });
+  const initialState: ScrollbarsState = {
+    vertical: {
+      isDragging: false,
+      isHovered: false,
+      thumbSize: 0,
+      thumbPosition: 0,
+      startPosition: 0,
+      startThumbPosition: 0,
+      hideTimeoutRef: useRef<NodeJS.Timeout | null>(null),
+    },
+    horizontal: {
+      isDragging: false,
+      isHovered: false,
+      thumbSize: 0,
+      thumbPosition: 0,
+      startPosition: 0,
+      startThumbPosition: 0,
+      hideTimeoutRef: useRef<NodeJS.Timeout | null>(null),
+    },
+  };
 
-  const [isScrollbarVisible, setIsScrollbarVisible] = useState(false);
+  const [scrollbars, dispatch] = useReducer(scrollbarsReducer, initialState);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const verticalThumbRef = useRef<HTMLDivElement>(null);
   const horizontalThumbRef = useRef<HTMLDivElement>(null);
 
-  // Рефы для управления анимацией и блокировками
   const animationFrameRef = useRef<number | null>(null);
   const isUpdatingFromDragRef = useRef(false);
   const lastDragUpdateRef = useRef({ vertical: 0, horizontal: 0 });
 
-  // Общее состояние для синхронизации
   const stateRef = useRef({
-    verticalHovered: vertical.isHovered,
-    horizontalHovered: horizontal.isHovered,
-    verticalDragging: vertical.isDragging,
-    horizontalDragging: horizontal.isDragging,
-    isScrollbarVisible,
+    verticalHovered: scrollbars.vertical.isHovered,
+    horizontalHovered: scrollbars.horizontal.isHovered,
+    verticalDragging: scrollbars.vertical.isDragging,
+    horizontalDragging: scrollbars.horizontal.isDragging,
   });
 
   useEffect(() => {
     stateRef.current = {
-      verticalHovered: vertical.isHovered,
-      horizontalHovered: horizontal.isHovered,
-      verticalDragging: vertical.isDragging,
-      horizontalDragging: horizontal.isDragging,
-      isScrollbarVisible,
+      verticalHovered: scrollbars.vertical.isHovered,
+      horizontalHovered: scrollbars.horizontal.isHovered,
+      verticalDragging: scrollbars.vertical.isDragging,
+      horizontalDragging: scrollbars.horizontal.isDragging,
     };
   }, [
-    vertical.isHovered,
-    horizontal.isHovered,
-    vertical.isDragging,
-    horizontal.isDragging,
-    isScrollbarVisible,
+    scrollbars.vertical.isHovered,
+    scrollbars.horizontal.isHovered,
+    scrollbars.vertical.isDragging,
+    scrollbars.horizontal.isDragging,
   ]);
 
-  // Функция для расчета размеров ползунков
-  const calculateThumb = useCallback(() => {
+  const visibility = useScrollbarVisibility(fadeTimeout, () => stateRef.current);
+
+  const calculateThumbSizes = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
     const container = containerRef.current;
     const content = contentRef.current;
 
-    // Вертикальный расчет
-    const verticalTrackHeight = container.clientHeight - (scrollbarWidth + 10);
-    const verticalScrollRatio = container.clientHeight / content.scrollHeight;
+    const verticalThumbSize = calculateThumbMetrics(
+      container.clientHeight,
+      scrollbarWidth,
+      content.scrollHeight,
+      container.clientHeight,
+      content.scrollTop,
+    ).thumbSize;
 
-    // Проверяем, нужен ли вертикальный скролл
-    const needsVerticalScroll = content.scrollHeight > container.clientHeight;
-    const verticalThumbSize = needsVerticalScroll
-      ? Math.max(verticalScrollRatio * verticalTrackHeight, 40)
-      : 0;
+    const horizontalThumbSize = calculateThumbMetrics(
+      container.clientWidth,
+      scrollbarWidth,
+      content.scrollWidth,
+      container.clientWidth,
+      content.scrollLeft,
+    ).thumbSize;
 
-    // Горизонтальный расчет
-    const horizontalTrackWidth = container.clientWidth - (scrollbarWidth + 10);
-    const horizontalScrollRatio = container.clientWidth / content.scrollWidth;
-
-    // Проверяем, нужен ли горизонтальный скролл
-    const needsHorizontalScroll = content.scrollWidth > container.clientWidth;
-    const horizontalThumbSize = needsHorizontalScroll
-      ? Math.max(horizontalScrollRatio * horizontalTrackWidth, 40)
-      : 0;
-
-    // Обновление состояний
-    setVertical((prev) => ({ ...prev, thumbSize: verticalThumbSize }));
-    setHorizontal((prev) => ({ ...prev, thumbSize: horizontalThumbSize }));
+    dispatch({
+      type: 'SET_THUMB_SIZE',
+      orientation: 'vertical',
+      value: verticalThumbSize,
+    });
+    dispatch({
+      type: 'SET_THUMB_SIZE',
+      orientation: 'horizontal',
+      value: horizontalThumbSize,
+    });
   }, [scrollbarWidth]);
 
-  // Функция для обновления позиций ползунков
   const updateThumbPositions = useCallback(() => {
     if (!containerRef.current || !contentRef.current) return;
     const container = containerRef.current;
     const content = contentRef.current;
 
-    // Если обновление инициировано перетаскиванием - пропускаем
     if (isUpdatingFromDragRef.current) return;
 
-    // Вертикальные расчеты
-    const verticalTrackHeight = container.clientHeight - (scrollbarWidth + 10);
-    const verticalMaxScroll = Math.max(0, content.scrollHeight - container.clientHeight);
+    const verticalResult = calculateThumbMetrics(
+      container.clientHeight,
+      scrollbarWidth,
+      content.scrollHeight,
+      container.clientHeight,
+      content.scrollTop,
+    );
 
-    let verticalThumbPos = 0;
-    if (verticalMaxScroll > 0 && vertical.thumbSize > 0) {
-      const thumbMaxPosition = verticalTrackHeight - vertical.thumbSize;
-      verticalThumbPos = (content.scrollTop / verticalMaxScroll) * thumbMaxPosition;
-      verticalThumbPos = Math.max(0, Math.min(thumbMaxPosition, verticalThumbPos));
-    }
+    const horizontalResult = calculateThumbMetrics(
+      container.clientWidth,
+      scrollbarWidth,
+      content.scrollWidth,
+      container.clientWidth,
+      content.scrollLeft,
+    );
 
-    // Горизонтальные расчеты
-    const horizontalTrackWidth = container.clientWidth - (scrollbarWidth + 10);
-    const horizontalMaxScroll = Math.max(0, content.scrollWidth - container.clientWidth);
+    dispatch({
+      type: 'SET_THUMB_POSITION',
+      orientation: 'vertical',
+      value: verticalResult.thumbPosition,
+    });
+    dispatch({
+      type: 'SET_THUMB_POSITION',
+      orientation: 'horizontal',
+      value: horizontalResult.thumbPosition,
+    });
+  }, [scrollbarWidth]);
 
-    let horizontalThumbPos = 0;
-    if (horizontalMaxScroll > 0 && horizontal.thumbSize > 0) {
-      const thumbMaxPosition = horizontalTrackWidth - horizontal.thumbSize;
-      horizontalThumbPos = (content.scrollLeft / horizontalMaxScroll) * thumbMaxPosition;
-      horizontalThumbPos = Math.max(0, Math.min(thumbMaxPosition, horizontalThumbPos));
-    }
+  const handlePointerMove = useCallback(
+    (e: PointerEvent, orientation: 'vertical' | 'horizontal') => {
+      const isVertical = orientation === 'vertical';
+      const scrollbar = isVertical ? scrollbars.vertical : scrollbars.horizontal;
 
-    // Обновление позиций
-    setVertical((prev) => ({ ...prev, thumbPosition: verticalThumbPos }));
-    setHorizontal((prev) => ({ ...prev, thumbPosition: horizontalThumbPos }));
-  }, [vertical.thumbSize, horizontal.thumbSize, scrollbarWidth]);
+      if (!scrollbar.isDragging || !containerRef.current || !contentRef.current) return;
 
-  // Управление таймаутами
-  const manageTimeout = useCallback(
-    (isHorizontal: boolean, action: 'clear' | 'schedule') => {
-      const scrollbar = isHorizontal ? horizontal : vertical;
-      const timeoutRef = scrollbar.hideTimeoutRef;
+      const container = containerRef.current;
+      const content = contentRef.current;
+      const positionProp = isVertical ? 'clientY' : 'clientX';
+      const scrollProp = isVertical ? 'scrollTop' : 'scrollLeft';
+      const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
+      const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
 
-      if (action === 'clear') {
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-        return;
-      }
+      const trackSize = container[clientProp] - (scrollbarWidth + TRACK_PADDING);
+      const maxScroll = Math.max(0, content[sizeProp] - content[clientProp]);
 
-      if (action === 'schedule') {
-        timeoutRef.current = setTimeout(() => {
-          const {
-            verticalHovered,
-            horizontalHovered,
-            verticalDragging,
-            horizontalDragging,
-          } = stateRef.current;
+      const delta = e[positionProp] - scrollbar.startPosition;
+      const newScrollPos = calculateScrollFromDrag(
+        delta,
+        scrollbar.startThumbPosition,
+        trackSize,
+        scrollbar.thumbSize,
+        maxScroll,
+      );
 
-          if (isHorizontal) {
-            if (!horizontalHovered && !horizontalDragging) {
-              setIsScrollbarVisible((prev) =>
-                verticalHovered || verticalDragging ? prev : false,
-              );
-            }
-          } else {
-            if (!verticalHovered && !verticalDragging) {
-              setIsScrollbarVisible((prev) =>
-                horizontalHovered || horizontalDragging ? prev : false,
-              );
-            }
-          }
-        }, fadeTimeout);
-      }
+      isUpdatingFromDragRef.current = true;
+      content[scrollProp] = newScrollPos;
+
+      const availableSpace = trackSize - scrollbar.thumbSize;
+      const thumbPosition =
+        maxScroll > 0 ? (newScrollPos / maxScroll) * availableSpace : 0;
+
+      updateThumbPositionDirectly(orientation, thumbPosition);
+
+      setTimeout(() => {
+        isUpdatingFromDragRef.current = false;
+      }, 0);
     },
-    [fadeTimeout, horizontal, vertical],
+    [scrollbars.vertical, scrollbars.horizontal, scrollbarWidth],
   );
 
-  const showScrollbar = useCallback(() => {
-    setIsScrollbarVisible(true);
-    manageTimeout(false, 'clear');
-    manageTimeout(true, 'clear');
-    manageTimeout(false, 'schedule');
-    manageTimeout(true, 'schedule');
-  }, [manageTimeout]);
-
-  // Оптимизированный обработчик скролла
   const handleScroll = useCallback(() => {
     if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging) {
       return;
@@ -219,11 +201,10 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
     animationFrameRef.current = requestAnimationFrame(() => {
       updateThumbPositions();
-      showScrollbar();
+      visibility.showScrollbar();
     });
-  }, [updateThumbPositions, showScrollbar]);
+  }, [updateThumbPositions, visibility]);
 
-  // Прямое обновление позиции ползунка без setState
   const updateThumbPositionDirectly = (
     orientation: 'vertical' | 'horizontal',
     position: number,
@@ -242,117 +223,64 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     }
   };
 
-  // Обработчик перетаскивания
-  const handlePointerMove = useCallback(
-    (e: PointerEvent, orientation: 'vertical' | 'horizontal') => {
-      const isVertical = orientation === 'vertical';
-      const scrollbar = isVertical ? vertical : horizontal;
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, orientation: 'vertical' | 'horizontal') => {
+      if (!containerRef.current || !contentRef.current) return;
+      e.preventDefault();
 
-      if (!scrollbar.isDragging || !containerRef.current || !contentRef.current) return;
+      const position = orientation === 'vertical' ? e.clientY : e.clientX;
+      const thumbPosition =
+        orientation === 'vertical'
+          ? scrollbars.vertical.thumbPosition
+          : scrollbars.horizontal.thumbPosition;
 
-      const container = containerRef.current;
-      const content = contentRef.current;
-      const positionProp = isVertical ? 'clientY' : 'clientX';
-      const scrollProp = isVertical ? 'scrollTop' : 'scrollLeft';
-      const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
-      const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
+      dispatch({
+        type: 'SET_DRAGGING',
+        value: true,
+        orientation,
+        startPosition: position,
+        startThumbPosition: thumbPosition,
+      });
 
-      const trackSize = container[clientProp] - (scrollbarWidth + 10);
-      const contentSize = content[sizeProp];
-      const containerSize = content[clientProp];
-      const maxScroll = Math.max(0, contentSize - containerSize + 1);
-      const availableSpace = trackSize - scrollbar.thumbSize;
-
-      if (availableSpace <= 0 || maxScroll <= 0) return;
-
-      const delta = e[positionProp] - scrollbar.startPosition;
-      let newThumbPos = scrollbar.startThumbPosition + delta;
-      newThumbPos = Math.max(0, Math.min(availableSpace, newThumbPos));
-
-      const scrollPercentage = newThumbPos / availableSpace;
-      let newScrollPos = scrollPercentage * maxScroll;
-
-      if (newThumbPos >= availableSpace - 1) {
-        newScrollPos = maxScroll;
-      }
-
-      // Устанавливаем флаг, что обновление идет от перетаскивания
-      isUpdatingFromDragRef.current = true;
-
-      // Прямое обновление позиции контента
-      content[scrollProp] = newScrollPos;
-
-      // Прямое обновление позиции ползунка без setState
-      updateThumbPositionDirectly(orientation, newThumbPos);
-
-      // Сбрасываем флаг после микротаска
-      setTimeout(() => {
-        isUpdatingFromDragRef.current = false;
-      }, 0);
+      visibility.showScrollbar();
+      document.body.style.userSelect = 'none';
     },
-    [vertical, horizontal, scrollbarWidth],
+    [scrollbars.horizontal.thumbPosition, scrollbars.vertical.thumbPosition, visibility],
   );
 
-  // Обработчики событий
-  const handlePointerDown = (
-    e: React.PointerEvent<HTMLDivElement>,
-    orientation: 'vertical' | 'horizontal',
-  ) => {
-    if (!containerRef.current || !contentRef.current) return;
-    e.preventDefault();
-
-    const position = orientation === 'vertical' ? e.clientY : e.clientX;
-    const thumbPosition =
-      orientation === 'vertical' ? vertical.thumbPosition : horizontal.thumbPosition;
-
-    if (orientation === 'vertical') {
-      setVertical((prev) => ({
-        ...prev,
-        isDragging: true,
-        startPosition: position,
-        startThumbPosition: thumbPosition,
-      }));
-    } else {
-      setHorizontal((prev) => ({
-        ...prev,
-        isDragging: true,
-        startPosition: position,
-        startThumbPosition: thumbPosition,
-      }));
-    }
-
-    showScrollbar();
-    document.body.style.userSelect = 'none';
-  };
+  const createPointerDownHandler = useCallback(
+    (orientation: 'vertical' | 'horizontal') => {
+      return (e: React.PointerEvent<HTMLDivElement>) => {
+        handlePointerDown(e, orientation);
+      };
+    },
+    [handlePointerDown],
+  );
 
   const stopDragging = useCallback(
     (orientation: 'vertical' | 'horizontal') => {
-      // Синхронизируем состояние после перетаскивания
-      if (orientation === 'vertical') {
-        setVertical((prev) => ({
-          ...prev,
-          isDragging: false,
-          thumbPosition: lastDragUpdateRef.current.vertical,
-        }));
-      } else {
-        setHorizontal((prev) => ({
-          ...prev,
-          isDragging: false,
-          thumbPosition: lastDragUpdateRef.current.horizontal,
-        }));
-      }
+      dispatch({
+        type: 'SET_DRAGGING',
+        value: false,
+        orientation,
+      });
+
+      dispatch({
+        type: 'SET_THUMB_POSITION',
+        value: lastDragUpdateRef.current[orientation],
+        orientation,
+      });
 
       document.body.style.userSelect = '';
-      manageTimeout(orientation === 'horizontal', 'schedule');
+      visibility.scheduleHide();
     },
-    [manageTimeout],
+    [visibility],
   );
 
-  // Эффекты
   useEffect(() => {
-    calculateThumb();
+    calculateThumbSizes();
     const ro = new ResizeObserver(() => {
-      calculateThumb();
+      calculateThumbSizes();
       updateThumbPositions();
     });
 
@@ -360,7 +288,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     if (contentRef.current) ro.observe(contentRef.current);
 
     return () => ro.disconnect();
-  }, [calculateThumb, updateThumbPositions]);
+  }, [calculateThumbSizes, updateThumbPositions]);
 
   useEffect(() => {
     const content = contentRef.current;
@@ -375,19 +303,18 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     };
   }, [handleScroll]);
 
-  // Обработчик перемещения указателя
   useEffect(() => {
     const handleMove = (e: PointerEvent) => {
-      if (vertical.isDragging) handlePointerMove(e, 'vertical');
-      if (horizontal.isDragging) handlePointerMove(e, 'horizontal');
+      if (scrollbars.vertical.isDragging) handlePointerMove(e, 'vertical');
+      if (scrollbars.horizontal.isDragging) handlePointerMove(e, 'horizontal');
     };
 
     const handleUp = () => {
-      if (vertical.isDragging) stopDragging('vertical');
-      if (horizontal.isDragging) stopDragging('horizontal');
+      if (scrollbars.vertical.isDragging) stopDragging('vertical');
+      if (scrollbars.horizontal.isDragging) stopDragging('horizontal');
     };
 
-    if (vertical.isDragging || horizontal.isDragging) {
+    if (scrollbars.vertical.isDragging || scrollbars.horizontal.isDragging) {
       document.addEventListener('pointermove', handleMove);
       document.addEventListener('pointerup', handleUp);
       document.addEventListener('pointercancel', handleUp);
@@ -398,7 +325,12 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       document.removeEventListener('pointerup', handleUp);
       document.removeEventListener('pointercancel', handleUp);
     };
-  }, [vertical.isDragging, horizontal.isDragging, handlePointerMove, stopDragging]);
+  }, [
+    scrollbars.vertical.isDragging,
+    scrollbars.horizontal.isDragging,
+    handlePointerMove,
+    stopDragging,
+  ]);
 
   useEffect(() => {
     const handleDocLeave = (e: MouseEvent) => {
@@ -408,92 +340,63 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
         e.clientX >= window.innerWidth ||
         e.clientY >= window.innerHeight
       ) {
-        manageTimeout(false, 'clear');
-        manageTimeout(true, 'clear');
-        setIsScrollbarVisible(false);
+        visibility.clearHideTimeout();
+        visibility.scheduleHide();
       }
     };
 
     document.addEventListener('mouseleave', handleDocLeave);
     return () => document.removeEventListener('mouseleave', handleDocLeave);
-  }, [manageTimeout]);
+  }, [visibility]);
 
-  // Рендер компонента
-  // Рендер компонента
   return (
     <div ref={containerRef} className={`${styles.appleScrollContainer} ${className}`}>
       <div ref={contentRef} className={styles.appleScrollContent}>
         {children}
       </div>
 
-      {/* Вертикальный Scrollbar - показываем только если нужен */}
-      {vertical.thumbSize > 0 && (
-        <div
-          className={styles.appleScrollbarTrackVertical}
-          style={{
-            width: scrollbarWidth,
-            opacity: isScrollbarVisible ? 1 : 0,
-            pointerEvents: isScrollbarVisible ? 'auto' : 'none',
-            bottom: scrollbarWidth + 10,
-            backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
-          }}
+      {scrollbars.vertical.thumbSize > 0 && (
+        <ScrollbarTrack
+          orientation="vertical"
+          scrollbarWidth={scrollbarWidth}
+          isTrack={isTrack}
+          thumbSize={scrollbars.vertical.thumbSize}
+          thumbPosition={scrollbars.vertical.thumbPosition}
+          isDragging={scrollbars.vertical.isDragging}
+          onPointerDown={createPointerDownHandler('vertical')}
           onMouseEnter={() => {
-            setVertical((prev) => ({ ...prev, isHovered: true }));
-            manageTimeout(false, 'clear');
+            dispatch({ type: 'SET_HOVERED', value: true, orientation: 'vertical' });
+            visibility.forceShow();
           }}
           onMouseLeave={() => {
-            setVertical((prev) => ({ ...prev, isHovered: false }));
-            manageTimeout(false, 'schedule');
+            dispatch({ type: 'SET_HOVERED', value: false, orientation: 'vertical' });
+            visibility.scheduleHide();
           }}
-        >
-          <div
-            ref={verticalThumbRef}
-            className={`${styles.appleScrollbarThumb} ${styles.appleScrollbarThumbVertical}`}
-            style={{
-              width: scrollbarWidth,
-              height: vertical.thumbSize,
-              borderRadius: scrollbarWidth / 2,
-              transform: `translateY(${vertical.thumbPosition}px)`,
-              transition: vertical.isDragging ? 'none' : 'transform 0.1s ease',
-            }}
-            onPointerDown={(e) => handlePointerDown(e, 'vertical')}
-          />
-        </div>
+          visibility={visibility}
+          thumbRef={verticalThumbRef}
+        />
       )}
 
-      {/* Горизонтальный Scrollbar - показываем только если нужен */}
-      {horizontal.thumbSize > 0 && (
-        <div
-          className={styles.appleScrollbarTrackHorizontal}
-          style={{
-            height: scrollbarWidth,
-            opacity: isScrollbarVisible ? 1 : 0,
-            pointerEvents: isScrollbarVisible ? 'auto' : 'none',
-            right: scrollbarWidth + 10,
-            backgroundColor: isTrack ? 'var(--scrollbar-color)' : 'transparent',
-          }}
+      {scrollbars.horizontal.thumbSize > 0 && (
+        <ScrollbarTrack
+          orientation="horizontal"
+          scrollbarWidth={scrollbarWidth}
+          isTrack={isTrack}
+          thumbSize={scrollbars.horizontal.thumbSize}
+          thumbPosition={scrollbars.horizontal.thumbPosition}
+          isDragging={scrollbars.horizontal.isDragging}
+          onPointerDown={createPointerDownHandler('horizontal')}
           onMouseEnter={() => {
-            setHorizontal((prev) => ({ ...prev, isHovered: true }));
-            manageTimeout(true, 'clear');
+            dispatch({ type: 'SET_HOVERED', value: true, orientation: 'horizontal' });
+            visibility.forceShow();
           }}
           onMouseLeave={() => {
-            setHorizontal((prev) => ({ ...prev, isHovered: false }));
-            manageTimeout(true, 'schedule');
+            dispatch({ type: 'SET_HOVERED', value: false, orientation: 'horizontal' });
+            visibility.scheduleHide();
           }}
-        >
-          <div
-            ref={horizontalThumbRef}
-            className={`${styles.appleScrollbarThumb} ${styles.appleScrollbarThumbHorizontal}`}
-            style={{
-              height: scrollbarWidth,
-              width: horizontal.thumbSize,
-              borderRadius: scrollbarWidth / 2,
-              transform: `translateX(${horizontal.thumbPosition}px)`,
-              transition: horizontal.isDragging ? 'none' : 'transform 0.1s ease',
-            }}
-            onPointerDown={(e) => handlePointerDown(e, 'horizontal')}
-          />
-        </div>
+          visibility={visibility}
+          thumbRef={horizontalThumbRef}
+        />
       )}
     </div>
   );
