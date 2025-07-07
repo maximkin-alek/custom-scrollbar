@@ -1,5 +1,5 @@
 import React, { CSSProperties, useMemo, forwardRef } from 'react';
-import styles from './AppleScrollbar.module.css';
+import styles from '../AppleScrollbar.module.css';
 
 interface ScrollbarThumbProps {
   orientation: 'vertical' | 'horizontal';
