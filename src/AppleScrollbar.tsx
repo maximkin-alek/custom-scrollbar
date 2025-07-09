@@ -1,20 +1,22 @@
-import React, { useRef, useEffect, useCallback, useReducer } from 'react';
+import React, {
+  useRef,
+  useEffect,
+  useCallback,
+  useReducer,
+  useLayoutEffect,
+} from 'react';
 import styles from './AppleScrollbar.module.css';
-import {
-  calculateThumbMetrics,
-  calculateScrollFromDrag,
-} from './utils/scrollbarUtils.ts';
-import { AppleScrollbarProps, ScrollbarsState } from './types';
+import { calculateThumbMetrics } from './utils/scrollbarUtils.ts';
+import { AppleScrollbarProps, ScrollbarsState } from './types.ts';
 import { scrollbarsReducer } from './scrollbarReducer.ts';
 import { useScrollbarVisibility } from './hooks/useScrollbarVisibility.ts';
 import ScrollbarTrack from './components/ScrollbarTrack.tsx';
+import { useScrollbarDrag } from './hooks/useScrollbarDrag.ts';
 
 const WIDTHS = {
   s: 4,
   m: 8,
 };
-
-const TRACK_PADDING = 10;
 
 const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
   children,
@@ -148,48 +150,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     });
   }, [scrollbarWidth]);
 
-  const handlePointerMove = useCallback(
-    (e: PointerEvent, orientation: 'vertical' | 'horizontal') => {
-      const isVertical = orientation === 'vertical';
-      const scrollbar = isVertical ? scrollbars.vertical : scrollbars.horizontal;
-
-      if (!scrollbar.isDragging || !containerRef.current || !contentRef.current) return;
-
-      const container = containerRef.current;
-      const content = contentRef.current;
-      const positionProp = isVertical ? 'clientY' : 'clientX';
-      const scrollProp = isVertical ? 'scrollTop' : 'scrollLeft';
-      const sizeProp = isVertical ? 'scrollHeight' : 'scrollWidth';
-      const clientProp = isVertical ? 'clientHeight' : 'clientWidth';
-
-      const trackSize = container[clientProp] - (scrollbarWidth + TRACK_PADDING);
-      const maxScroll = Math.max(0, content[sizeProp] - content[clientProp]);
-
-      const delta = e[positionProp] - scrollbar.startPosition;
-      const newScrollPos = calculateScrollFromDrag(
-        delta,
-        scrollbar.startThumbPosition,
-        trackSize,
-        scrollbar.thumbSize,
-        maxScroll,
-      );
-
-      isUpdatingFromDragRef.current = true;
-      content[scrollProp] = newScrollPos;
-
-      const availableSpace = trackSize - scrollbar.thumbSize;
-      const thumbPosition =
-        maxScroll > 0 ? (newScrollPos / maxScroll) * availableSpace : 0;
-
-      updateThumbPositionDirectly(orientation, thumbPosition);
-
-      setTimeout(() => {
-        isUpdatingFromDragRef.current = false;
-      }, 0);
-    },
-    [scrollbars.vertical, scrollbars.horizontal, scrollbarWidth],
-  );
-
   const handleScroll = useCallback(() => {
     if (stateRef.current.verticalDragging || stateRef.current.horizontalDragging) {
       return;
@@ -205,79 +165,34 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
     });
   }, [updateThumbPositions, visibility]);
 
-  const updateThumbPositionDirectly = (
-    orientation: 'vertical' | 'horizontal',
-    position: number,
-  ) => {
-    const thumbRef =
-      orientation === 'vertical' ? verticalThumbRef.current : horizontalThumbRef.current;
+  // Используем кастомный хук для перетаскивания
+  const verticalDrag = useScrollbarDrag({
+    orientation: 'vertical',
+    scrollbar: scrollbars.vertical,
+    scrollbarWidth,
+    containerRef,
+    contentRef,
+    dispatch,
+    visibility,
+    lastDragUpdateRef,
+    isUpdatingFromDragRef,
+    thumbRef: verticalThumbRef,
+  });
 
-    if (!thumbRef) return;
+  const horizontalDrag = useScrollbarDrag({
+    orientation: 'horizontal',
+    scrollbar: scrollbars.horizontal,
+    scrollbarWidth,
+    containerRef,
+    contentRef,
+    dispatch,
+    visibility,
+    lastDragUpdateRef,
+    isUpdatingFromDragRef,
+    thumbRef: horizontalThumbRef,
+  });
 
-    if (orientation === 'vertical') {
-      thumbRef.style.transform = `translateY(${position}px)`;
-      lastDragUpdateRef.current.vertical = position;
-    } else {
-      thumbRef.style.transform = `translateX(${position}px)`;
-      lastDragUpdateRef.current.horizontal = position;
-    }
-  };
-
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>, orientation: 'vertical' | 'horizontal') => {
-      if (!containerRef.current || !contentRef.current) return;
-      e.preventDefault();
-
-      const position = orientation === 'vertical' ? e.clientY : e.clientX;
-      const thumbPosition =
-        orientation === 'vertical'
-          ? scrollbars.vertical.thumbPosition
-          : scrollbars.horizontal.thumbPosition;
-
-      dispatch({
-        type: 'SET_DRAGGING',
-        value: true,
-        orientation,
-        startPosition: position,
-        startThumbPosition: thumbPosition,
-      });
-
-      visibility.showScrollbar();
-      document.body.style.userSelect = 'none';
-    },
-    [scrollbars.horizontal.thumbPosition, scrollbars.vertical.thumbPosition, visibility],
-  );
-
-  const createPointerDownHandler = useCallback(
-    (orientation: 'vertical' | 'horizontal') => {
-      return (e: React.PointerEvent<HTMLDivElement>) => {
-        handlePointerDown(e, orientation);
-      };
-    },
-    [handlePointerDown],
-  );
-
-  const stopDragging = useCallback(
-    (orientation: 'vertical' | 'horizontal') => {
-      dispatch({
-        type: 'SET_DRAGGING',
-        value: false,
-        orientation,
-      });
-
-      dispatch({
-        type: 'SET_THUMB_POSITION',
-        value: lastDragUpdateRef.current[orientation],
-        orientation,
-      });
-
-      document.body.style.userSelect = '';
-      visibility.scheduleHide();
-    },
-    [visibility],
-  );
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     calculateThumbSizes();
     const ro = new ResizeObserver(() => {
       calculateThumbSizes();
@@ -286,6 +201,12 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
 
     if (containerRef.current) ro.observe(containerRef.current);
     if (contentRef.current) ro.observe(contentRef.current);
+
+    if (contentRef.current) {
+      Array.from(contentRef.current.children).forEach((child) => {
+        ro.observe(child);
+      });
+    }
 
     return () => ro.disconnect();
   }, [calculateThumbSizes, updateThumbPositions]);
@@ -302,35 +223,6 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
       }
     };
   }, [handleScroll]);
-
-  useEffect(() => {
-    const handleMove = (e: PointerEvent) => {
-      if (scrollbars.vertical.isDragging) handlePointerMove(e, 'vertical');
-      if (scrollbars.horizontal.isDragging) handlePointerMove(e, 'horizontal');
-    };
-
-    const handleUp = () => {
-      if (scrollbars.vertical.isDragging) stopDragging('vertical');
-      if (scrollbars.horizontal.isDragging) stopDragging('horizontal');
-    };
-
-    if (scrollbars.vertical.isDragging || scrollbars.horizontal.isDragging) {
-      document.addEventListener('pointermove', handleMove);
-      document.addEventListener('pointerup', handleUp);
-      document.addEventListener('pointercancel', handleUp);
-    }
-
-    return () => {
-      document.removeEventListener('pointermove', handleMove);
-      document.removeEventListener('pointerup', handleUp);
-      document.removeEventListener('pointercancel', handleUp);
-    };
-  }, [
-    scrollbars.vertical.isDragging,
-    scrollbars.horizontal.isDragging,
-    handlePointerMove,
-    stopDragging,
-  ]);
 
   useEffect(() => {
     const handleDocLeave = (e: MouseEvent) => {
@@ -363,7 +255,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
           thumbSize={scrollbars.vertical.thumbSize}
           thumbPosition={scrollbars.vertical.thumbPosition}
           isDragging={scrollbars.vertical.isDragging}
-          onPointerDown={createPointerDownHandler('vertical')}
+          onPointerDown={verticalDrag.handlePointerDown}
           onMouseEnter={() => {
             dispatch({ type: 'SET_HOVERED', value: true, orientation: 'vertical' });
             visibility.forceShow();
@@ -385,7 +277,7 @@ const AppleScrollbar: React.FC<AppleScrollbarProps> = ({
           thumbSize={scrollbars.horizontal.thumbSize}
           thumbPosition={scrollbars.horizontal.thumbPosition}
           isDragging={scrollbars.horizontal.isDragging}
-          onPointerDown={createPointerDownHandler('horizontal')}
+          onPointerDown={horizontalDrag.handlePointerDown}
           onMouseEnter={() => {
             dispatch({ type: 'SET_HOVERED', value: true, orientation: 'horizontal' });
             visibility.forceShow();
