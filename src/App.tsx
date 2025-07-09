@@ -31,7 +31,7 @@ function App() {
           alt=""
         />
       </AppleScrollbar>
-
+{/* 
       <h3 className="title">Горизонтальный скролл</h3>
       <AppleScrollbar className="custom-container" size="m" fadeTimeout={1000}>
         <div style={{ display: 'flex', minWidth: 'max-content' }} className="">
@@ -75,7 +75,7 @@ function App() {
             </div>
           ))}
         </div>
-      </AppleScrollbar>
+      </AppleScrollbar> */}
     </div>
   );
 }
